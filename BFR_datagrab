@@ -238,7 +238,7 @@ PROD_BFR <- PROD_BFR %>%
 
 
 
-bank <- read.csv("institutions.csv") 
+bank <- read.csv("locations.csv") 
 
 bank <- bank %>% 
   # Extract the last four digits of the ESTYMD column and convert to numeric
@@ -548,7 +548,6 @@ metro <- metro %>%
 
 
 
-
 reis_govtpayment_sales <- read.csv("REIS GovtPayment Sales.csv")  
 
 # Transform the dataset from long to wide format
@@ -568,10 +567,27 @@ reis_govtpayment_sales <- reis_govtpayment_sales %>%
   filter(!(if_all(c(animalsales_total_county, cropsales_total_county, govtpay_total_county), is.na))) 
 
 
+
+
+# NONFARM INCOME 
+
+
+nonfarm_income <- read.csv("NonfarmIncome.csv") 
+
+# Step 1: Add leading zero to GeoFips if it is 4 digits
+nonfarm_income <- nonfarm_income %>%
+  mutate(GeoFips = ifelse(nchar(as.character(GeoFips)) == 4, paste0("0", GeoFips), as.character(GeoFips))) %>% 
+  rename(fips = GeoFips, nonfarm_income = X2022) %>% 
+  select(fips, nonfarm_income) 
+
+
+
 # MERGE 
 
  
-final_data <- merge(final_data, metro, by = "fips", all.x=TRUE)
+final_data <- merge(final_data, metro, by = "fips", all.x=TRUE) 
+
+final_data <- merge(final_data, nonfarm_income, by="fips", all.x=TRUE) 
 
 
 # Assuming your dataset is called metro
@@ -589,6 +605,8 @@ final_data <- na.omit(final_data)
 
 # Read the data 
 BFR <- read_dta("BFR.dta") 
+
+BFR$bankbranch <- BFR$bankpersqmile*BFR$landsqmile 
 
 BFR_1997 <- BFR %>% filter(Year == 1997) 
 BFR_2002 <- BFR %>% filter(Year == 2002) 
@@ -1265,7 +1283,9 @@ data$indemnity_per_acre <- data$indemnity_total_county/data$cropland_total_count
 data$govtpay_per_op_qs <- rowSums(data[, c("fedgovtpay_per_op", "stategovtpay_per_op")], na.rm=TRUE) 
 data$govtpay_per_op_reis <- data$govtpay_total_county/data$num_op_total_county
 
-data_2022 <- merge(data, final_data, by="fips")
+data_2022 <- merge(data, final_data, by="fips") 
+
+data_2022$nonfarm_income_per_op <- as.numeric(data_2022$nonfarm_income)/data_2022$num_op_total_county 
 
 data_2022$annual_tempsq <- data_2022$annual_temp^2 
 data_2022$annual_precipsq <- data_2022$annual_precip^2 
@@ -1285,7 +1305,11 @@ BFR <- read_dta("BFR.dta")
 head(BFR)
 # summary(BFR) 
 
+BFR$Govtpayments_per_op <- BFR$Govtpayments/BFR$NumofFarmOperations 
+BFR$pNonfarmProp_new <- BFR$NonFarmProprietor/BFR$workingpopulation 
 
+mean(BFR$pNonfarmProp_new[is.finite(BFR$pNonfarmProp_new)], na.rm = TRUE) 
+BFR$bankbranch <- BFR$bankpersqmile*BFR$landsqmile 
 
 
 # Calculate groupwise means
@@ -1343,17 +1367,17 @@ BFR_means <- BFR %>%
     FarmPrice = mean(landprice, na.rm=TRUE), 
     DaysOffFarm_above200 = mean(offfarm200, na.rm=TRUE), 
     NumFarmOps = mean(NumofFarmOperations, na.rm=TRUE), 
-    NetCashIncome_per_Op = mean(farmincome_perfarm, na.rm=TRUE), 
+    NetCashIncome_per_Op = mean(fincomeA, na.rm=TRUE), #farmincome_perfarm 
     NonFarmIncome_per_Op = mean(NonFarmEarning_perfarm, na.rm=TRUE), 
     Indemnity_per_Acre = mean(Indem_acre, na.rm=TRUE), 
-    GovtPay_per_Op = mean(Govtpayments, na.rm=TRUE), 
+    GovtPay_per_Op = mean(Govtpayments_per_op, na.rm=TRUE), 
     
-    Bank_per_SQmile = mean(bankpersqmile, na.rm=TRUE), 
+    Bank_per_SQmile = sum(bankbranch, na.rm=TRUE)/sum(landsqmile, na.rm=TRUE), 
     FCS_per_SQmile = mean(FCSpersqmile, na.rm=TRUE), 
     
     AgShare = mean(AgGDPratio, na.rm=TRUE), 
     Unemployment = mean(Unemploymentrate, na.rm=TRUE), 
-    NonFarmProp = mean(pNonfarmProp, na.rm=TRUE), 
+    NonFarmProp = mean(pNonfarmProp_new[is.finite(pNonfarmProp_new)], na.rm=TRUE), 
     Cropland = mean(croplandinacres, na.rm=TRUE), 
     Metro = mean(metro, na.rm=TRUE), 
     Disaster = mean(pddv, na.rm=TRUE), 
@@ -1386,9 +1410,9 @@ data2022_means <- data_2022 %>%
     DaysOffFarm_above200 = mean(days_off_farm_200, na.rm=TRUE), 
     NumFarmOps = mean(num_op_total_county, na.rm=TRUE), 
     NetCashIncome_per_Op = mean(netincome_per_op, na.rm=TRUE), 
-    NonFarmIncome_per_Op = 0, 
+    NonFarmIncome_per_Op = mean(nonfarm_income_per_op, na.rm=TRUE), 
     Indemnity_per_Acre = mean(indemnity_per_acre, na.rm=TRUE), 
-    GovtPay_per_Op = mean(govtpay_per_op, na.rm=TRUE), 
+    GovtPay_per_Op = mean(govtpay_per_op_reis, na.rm=TRUE), 
     
     Bank_per_SQmile = mean(bank_density, na.rm=TRUE), 
     FCS_per_SQmile = 0, 
@@ -1455,6 +1479,95 @@ payment <- payment %>%
 
 
 
+# Calculate groupwise sds
+BFR_sds <- BFR %>%
+  group_by(Year) %>%
+  summarise(
+    BFR = sd(BFRprin, na.rm = TRUE),
+    BFR_1to5 = sd(BFRexplt5, na.rm = TRUE), 
+    BFR_1to3 = sd(BFR_explt3, na.rm = TRUE),
+    Operator_above65 = sd(operatorsagege65, na.rm = TRUE),
+    Operator_under35 = sd(young, na.rm = TRUE),
+    Operator_female = sd(Women_producers, na.rm = TRUE), 
+    
+    AvgFarmSize = sd(avgfarmsize, na.rm=TRUE), 
+    Productivity = sd(avgfarmproductivity, na.rm=TRUE), 
+    FarmPrice = sd(landprice, na.rm=TRUE), 
+    DaysOffFarm_above200 = sd(offfarm200, na.rm=TRUE), 
+    NumFarmOps = sd(NumofFarmOperations, na.rm=TRUE), 
+    NetCashIncome_per_Op = sd(fincomeA, na.rm=TRUE), #farmincome_perfarm 
+    NonFarmIncome_per_Op = sd(NonFarmEarning_perfarm, na.rm=TRUE), 
+    Indemnity_per_Acre = sd(Indem_acre, na.rm=TRUE), 
+    GovtPay_per_Op = sd(Govtpayments_per_op, na.rm=TRUE), 
+    
+    Bank_per_SQmile = sd(bankpersqmile, na.rm=TRUE), #sum(bankbranch, na.rm=TRUE)/sum(landsqmile, na.rm=TRUE), 
+    FCS_per_SQmile = sd(FCSpersqmile, na.rm=TRUE), 
+    
+    AgShare = sd(AgGDPratio, na.rm=TRUE), 
+    Unemployment = sd(Unemploymentrate, na.rm=TRUE), 
+    NonFarmProp = sd(pNonfarmProp_new[is.finite(pNonfarmProp_new)], na.rm=TRUE), 
+    Cropland = sd(croplandinacres, na.rm=TRUE), 
+    Metro = sd(metro, na.rm=TRUE), 
+    Disaster = sd(pddv, na.rm=TRUE), 
+    
+    Temperature = sd(annualmeant, na.rm=TRUE), 
+    Temperature_sq = sd(sqannualmeant, na.rm=TRUE), 
+    Precipitation = sd(annualmeanpcpn, na.rm=TRUE), 
+    Precipitation_sq = sd(sqannualmeanpcpn, na.rm=TRUE) 
+    
+  ) 
 
+
+
+
+
+
+# Calculate groupwise sds
+data2022_sds <- data_2022 %>% 
+  summarise( 
+    BFR = sd(BFR, na.rm = TRUE),
+    BFR_1to5 = sd(BFR_LT5, na.rm = TRUE), 
+    BFR_1to3 = sd(bfr_0_3, na.rm = TRUE),
+    Operator_above65 = sd(GT65, na.rm = TRUE),
+    Operator_under35 = sd(bfr_lt_35, na.rm = TRUE),
+    Operator_female = sd(bfr_female, na.rm = TRUE), 
+    
+    AvgFarmSize = sd(area_per_op, na.rm=TRUE), 
+    Productivity = sd(productivity_qs, na.rm=TRUE), 
+    FarmPrice = sd(farm_price, na.rm=TRUE), 
+    DaysOffFarm_above200 = sd(days_off_farm_200, na.rm=TRUE), 
+    NumFarmOps = sd(num_op_total_county, na.rm=TRUE), 
+    NetCashIncome_per_Op = sd(netincome_per_op, na.rm=TRUE), 
+    NonFarmIncome_per_Op = sd(nonfarm_income_per_op, na.rm=TRUE), 
+    Indemnity_per_Acre = sd(indemnity_per_acre, na.rm=TRUE), 
+    GovtPay_per_Op = sd(govtpay_per_op_reis, na.rm=TRUE), 
+    
+    Bank_per_SQmile = sd(bank_density, na.rm=TRUE), 
+    FCS_per_SQmile = 0, 
+    
+    AgShare = sd(ag_to_gdp, na.rm=TRUE), 
+    Unemployment = sd(unemp_rate, na.rm=TRUE), 
+    NonFarmProp = sd(nonfarm_prop, na.rm=TRUE), 
+    Cropland = sd(cropland_total_county, na.rm=TRUE), 
+    Metro = sd(metro, na.rm=TRUE), 
+    Disaster = sd(incidence, na.rm=TRUE), 
+    
+    Temperature = sd(annual_temp, na.rm=TRUE), 
+    Temperature_sq = sd(annual_tempsq, na.rm=TRUE), 
+    Precipitation = sd(annual_precip, na.rm=TRUE), 
+    Precipitation_sq = sd(annual_precipsq, na.rm=TRUE) 
+    
+  ) 
+
+
+# Add the new column as the first column 
+data2022_sds <- data2022_sds %>%
+  mutate(Year = as.numeric(2022)) %>%
+  select(Year, everything()) 
+
+BFR_sds$Year <- c(1997, 2002, 2007, 2012, 2017)
+
+# Add the first row from df2 to df1 
+data_sd <- rbind(BFR_sds, data2022_sds) 
 
 
