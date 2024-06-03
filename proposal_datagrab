@@ -1,0 +1,344 @@
+
+
+
+
+rm(list=ls()) 
+
+library(dplyr)
+library(stringr)
+library(tidyr) 
+library(haven) 
+library(tidyUSDA) 
+library(sf) 
+library(units) 
+
+setwd("C:/Users/syedm/Desktop/BFR Spatial/Proposal_06022024") 
+
+# https://www2.census.gov/programs-surveys/popest/datasets/
+
+
+pop2021 <- read.csv("agepop_2021.csv") 
+
+pop2022 <- read.csv("agepop_2022.csv") 
+
+pop2021 <- pop2021 %>%
+  # Ensure state_fips_code and county_code are character strings
+  mutate(fips_state = as.character(STATE),
+         fips_county = as.character(COUNTY)) %>%
+  
+  # Pad state_fips_code to 2 digits and county_code to 3 digits
+  mutate(fips_state = str_pad(fips_state, width = 2, side = "left", pad = "0"),
+         fips_county = str_pad(fips_county, width = 3, side = "left", pad = "0")) %>%
+  
+  # Create the new fips column by concatenating state_fips_code and county_code
+  mutate(fips = paste0(fips_state, fips_county)) %>%
+  filter(YEAR == 3) %>% 
+  select(fips, POPEST_MALE) 
+
+
+pop2017 <- read.csv("agepop_2017.csv") 
+
+pop2017 <- pop2017 %>%
+  # Ensure state_fips_code and county_code are character strings
+  mutate(fips_state = as.character(STATE),
+         fips_county = as.character(COUNTY)) %>%
+  
+  # Pad state_fips_code to 2 digits and county_code to 3 digits
+  mutate(fips_state = str_pad(fips_state, width = 2, side = "left", pad = "0"),
+         fips_county = str_pad(fips_county, width = 3, side = "left", pad = "0")) %>%
+  
+  # Create the new fips column by concatenating state_fips_code and county_code
+  mutate(fips = paste0(fips_state, fips_county)) %>%
+  filter(YEAR == 10, AGEGRP == 0) %>% 
+  select(fips, TOT_MALE) 
+
+
+pop <- merge(pop2017, pop2021, by="fips") 
+pop <- pop %>% rename(male_pop2017 = TOT_MALE, male_pop2021 = POPEST_MALE)
+
+# PRODUCERS, FEMALE - NUMBER OF OPERATIONS 
+
+(
+  QS_PRIN_FEMALE_2017 <- 
+  getQuickstat(
+    #--- put your API key in place of key_get() ---#
+    key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+    program = "CENSUS",
+    sector = "DEMOGRAPHICS",
+    group = "PRODUCERS", 
+    commodity = "PRODUCERS, PRINCIPAL", 
+    category = "PRODUCERS", 
+    data_item = "PRODUCERS, PRINCIPAL, FEMALE - NUMBER OF PRODUCERS", 
+    geographic_level = "COUNTY", 
+    year = "2017", 
+  )  %>% 
+  # Create the new fips column by concatenating state_fips_code and county_code
+  mutate(fips = paste0(state_fips_code, county_code)) %>% 
+  
+  rename(prin_female_2017 = Value) %>% 
+  
+  dplyr::select(
+    fips, state_name, prin_female_2017
+  ) 
+) 
+
+
+
+(
+  QS_FEMALE_2017 <- 
+    getQuickstat(
+      #--- put your API key in place of key_get() ---#
+      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      program = "CENSUS",
+      sector = "DEMOGRAPHICS",
+      group = "PRODUCERS", 
+      commodity = "PRODUCERS", 
+      category = "PRODUCERS", 
+      data_item = "PRODUCERS, (ALL), FEMALE - NUMBER OF PRODUCERS", 
+      geographic_level = "COUNTY", 
+      year = "2017", 
+    )  %>% 
+    # Create the new fips column by concatenating state_fips_code and county_code
+    mutate(fips = paste0(state_fips_code, county_code)) %>% 
+    
+    rename(female_2017 = Value) %>% 
+    
+    dplyr::select(
+      fips, female_2017
+    ) 
+) 
+
+
+
+
+(
+  QS_FEMALE_2022 <- 
+    getQuickstat(
+      #--- put your API key in place of key_get() ---#
+      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      program = "CENSUS",
+      sector = "DEMOGRAPHICS",
+      group = "PRODUCERS", 
+      commodity = "PRODUCERS", 
+      category = "PRODUCERS", 
+      data_item = "PRODUCERS, (ALL), FEMALE - NUMBER OF PRODUCERS", 
+      geographic_level = "COUNTY", 
+      year = "2022", 
+    )  %>% 
+    # Create the new fips column by concatenating state_fips_code and county_code
+    mutate(fips = paste0(state_fips_code, county_code)) %>% 
+    
+    rename(female_2022 = Value) %>% 
+    
+    dplyr::select(
+      fips, female_2022
+    ) 
+) 
+
+
+
+(
+  QS_PRIN_TOTAL_2017 <- 
+    getQuickstat(
+      #--- put your API key in place of key_get() ---#
+      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      program = "CENSUS",
+      sector = "DEMOGRAPHICS",
+      group = "PRODUCERS", 
+      commodity = "PRODUCERS, PRINCIPAL", 
+      category = "PRODUCERS", 
+      data_item = "PRODUCERS, PRINCIPAL - NUMBER OF PRODUCERS", 
+      geographic_level = "COUNTY", 
+      year = "2017", 
+    )  %>% 
+    # Create the new fips column by concatenating state_fips_code and county_code
+    mutate(fips = paste0(state_fips_code, county_code)) %>% 
+    
+    rename(prin_total_2017 = Value) %>% 
+    
+    dplyr::select(
+      fips, prin_total_2017
+    ) 
+) 
+
+
+
+(
+  QS_TOTAL_2017 <- 
+    getQuickstat(
+      #--- put your API key in place of key_get() ---#
+      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      program = "CENSUS",
+      sector = "DEMOGRAPHICS",
+      group = "PRODUCERS", 
+      commodity = "PRODUCERS", 
+      category = "PRODUCERS", 
+      data_item = "PRODUCERS, (ALL) - NUMBER OF PRODUCERS", 
+      geographic_level = "COUNTY", 
+      year = "2017", 
+    )  %>% 
+    # Create the new fips column by concatenating state_fips_code and county_code
+    mutate(fips = paste0(state_fips_code, county_code)) %>% 
+    
+    rename(total_2017 = Value) %>% 
+    
+    dplyr::select(
+      fips, total_2017
+    ) 
+) 
+
+
+
+
+(
+  QS_TOTAL_2022 <- 
+    getQuickstat(
+      #--- put your API key in place of key_get() ---#
+      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      program = "CENSUS",
+      sector = "DEMOGRAPHICS",
+      group = "PRODUCERS", 
+      commodity = "PRODUCERS", 
+      category = "PRODUCERS", 
+      data_item = "PRODUCERS, (ALL) - NUMBER OF PRODUCERS", 
+      geographic_level = "COUNTY", 
+      year = "2022", 
+    )  %>% 
+    # Create the new fips column by concatenating state_fips_code and county_code
+    mutate(fips = paste0(state_fips_code, county_code)) %>% 
+    
+    rename(total_2022 = Value) %>% 
+    
+    dplyr::select(
+      fips, total_2022
+    ) 
+) 
+
+
+# Merge df1 and df2
+data_qs <- merge(QS_PRIN_FEMALE_2017, QS_FEMALE_2017, by="fips", all.x=TRUE) 
+
+# Merge the result with df3
+data_qs <- merge(data_qs, QS_FEMALE_2022, by="fips", all.x=TRUE) 
+
+data_qs <- merge(data_qs, QS_PRIN_TOTAL_2017, by="fips", all.x=TRUE) 
+
+data_qs <- merge(data_qs, QS_TOTAL_2017, by="fips", all.x=TRUE) 
+
+data_qs <- merge(data_qs, QS_TOTAL_2022, by="fips", all.x=TRUE) 
+
+
+
+data <- merge(data_qs, pop, by="fips") 
+
+data <- data %>%
+  mutate(state_name = str_to_title(state_name))
+
+
+# Group by state_name and calculate groupwise sum
+data_state <- data %>% 
+  group_by(state_name) %>% 
+  summarize(
+    prin_female_2017 = sum(prin_female_2017, na.rm = TRUE),
+    female_2017 = sum(female_2017, na.rm = TRUE),
+    female_2022 = sum(female_2022, na.rm = TRUE),
+    prin_total_2017 = sum(prin_total_2017, na.rm = TRUE),
+    total_2017 = sum(total_2017, na.rm = TRUE),
+    total_2022 = sum(total_2022, na.rm = TRUE), 
+    male_pop2017 = sum(male_pop2017, na.rm=TRUE), 
+    male_pop2021 = sum(male_pop2021, na.rm=TRUE)
+  ) 
+
+
+states_of_interest <- c("Alabama", "Florida", "Georgia", "Arkansas", 
+                        "Louisiana", "Mississippi", "North Carolina", 
+                        "South Carolina", "Tennessee", "Virginia", 
+                        "West Virginia", "Kentucky") 
+
+# Assuming your dataset is called `data`
+data_se <- data_state %>%
+  filter(state_name %in% states_of_interest)
+
+
+# Create a total row
+total_se <- data_se %>%
+  summarize(
+    state_name = "Total SE",
+    prin_female_2017 = sum(prin_female_2017),
+    female_2017 = sum(female_2017),
+    female_2022 = sum(female_2022),
+    prin_total_2017 = sum(prin_total_2017),
+    total_2017 = sum(total_2017),
+    total_2022 = sum(total_2022), 
+    male_pop2017 = sum(male_pop2017), 
+    male_pop2021 = sum(male_pop2021)
+  )
+
+# Combine the summarized data with the total row
+data_se <- bind_rows(data_se, total_se) 
+
+
+# Assuming your dataset is called `data`
+data_others <- data_state %>%
+  filter(!(state_name %in% states_of_interest))
+
+# Create a total row
+total_others <- data_others %>%
+  summarize(
+    state_name = "Total Others",
+    prin_female_2017 = sum(prin_female_2017),
+    female_2017 = sum(female_2017),
+    female_2022 = sum(female_2022),
+    prin_total_2017 = sum(prin_total_2017),
+    total_2017 = sum(total_2017),
+    total_2022 = sum(total_2022), 
+    male_pop2017 = sum(male_pop2017), 
+    male_pop2021 = sum(male_pop2021)
+  )
+
+# Combine the summarized data with the total row
+data_others <- bind_rows(data_others, total_others) 
+
+
+
+
+
+# Create a total row
+total <- data_state %>%
+  summarize(
+    state_name = "Total USA",
+    prin_female_2017 = sum(prin_female_2017),
+    female_2017 = sum(female_2017),
+    female_2022 = sum(female_2022),
+    prin_total_2017 = sum(prin_total_2017),
+    total_2017 = sum(total_2017),
+    total_2022 = sum(total_2022), 
+    male_pop2017 = sum(male_pop2017), 
+    male_pop2021 = sum(male_pop2021)
+  )
+
+# Combine the summarized data with the total row
+data_state <- bind_rows(data_state, total) 
+
+
+
+
+data_se <- bind_rows(data_se, data_others[nrow(data_others), ]) 
+data_se <- bind_rows(data_se, data_state[nrow(data_state), ])
+
+
+data_se$prinfemale2017_to_malepop <- (data_se$prin_female_2017/data_se$male_pop2017)*100 
+data_se$female2017_to_malepop <- (data_se$female_2017/data_se$male_pop2017)*100 
+data_se$female2022_to_malepop <- (data_se$female_2022/data_se$male_pop2021)*100 
+
+
+data_se$prinfemale2017_to_totalprinprod <- (data_se$prin_female_2017/data_se$prin_total_2017)*100 
+data_se$female2017_to_totalprod <- (data_se$female_2017/data_se$total_2017)*100 
+data_se$female2022_to_totalprod <- (data_se$female_2022/data_se$total_2022)*100 
+
+
+
+
+
+
+
