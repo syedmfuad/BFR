@@ -1,0 +1,726 @@
+
+rm(list=ls()) 
+
+library(dplyr)
+library(stringr)
+library(tidyr) 
+library(haven) 
+library(tidyUSDA) 
+library(sf) 
+library(units) 
+library(labelled) 
+
+setwd("C:/Users/syedm/Desktop/BFR Spatial/CDFI") 
+
+loan <- read_dta("loans 2013-2021.dta") 
+
+demo <- read_dta("demograhic 2011 2021.dta") 
+
+demo <- subset(demo, year >= 2013) 
+
+loan_demo <- merge(loan, demo, by = c("geoid", "year")) 
+
+cdfi <- readxl::read_excel("C:/Users/syedm/Desktop/BFR Spatial/CDFI/NMTC_Public_Data_Release_includes_FY_2021_Data_final.xlsx", sheet = 2) 
+
+cdfi <- subset(cdfi, `Origination Year` >= 2013) 
+
+cdfi$`2010 Census Tract` <- as.character(cdfi$`2010 Census Tract`) 
+
+cdfi <- cdfi %>%
+  mutate(`2010 Census Tract` = ifelse(nchar(as.character(`2010 Census Tract`)) == 10, paste0("0", `2010 Census Tract`), as.character(`2010 Census Tract`))) 
+
+cdfi <- cdfi %>%
+  rename(geoid = `2010 Census Tract`, 
+         year = `Origination Year`, 
+         Org_name = `Community Development Entity (CDE) Name`) 
+
+loan_demo_cdfi <- merge(loan_demo, cdfi, by=c("geoid", "year"), all.y=TRUE) 
+
+cdfi_type <- readxl::read_excel("C:/Users/syedm/Desktop/BFR Spatial/CDFI/CDFI Cert List 04-14-2021 Final.xlsx", sheet = 1, skip = 6) 
+
+#cdfi_type <- readxl::read_excel("C:/Users/syedm/Desktop/BFR Spatial/CDFI/CDFI-Cert-List-as-of-11-18-2019-Final.xlsx", sheet = 1, skip = 6) 
+
+cdfi_type <- cdfi_type %>%
+  rename(Org_name = `Organization Name`) 
+
+cdfi_type$`...6` <- NULL 
+cdfi_type$`...9` <- NULL 
+
+cdfi_type$`...7` <- NULL 
+cdfi_type$`...10` <- NULL 
+
+#loan_demo_cdfi <- merge(loan_demo_cdfi, cdfi_type, by="Org_name", all.x=TRUE) 
+
+#sum(is.na(loan_demo_cdfi$`Financial Institution Type`) | loan_demo_cdfi$`Financial Institution Type` == "") 
+
+# Using dplyr for multiple conditional changes 
+cdfi_type <- cdfi_type %>%
+  mutate(Org_name = case_when(
+    Org_name == "ACCION San Diego" ~ "Accion Opportunity Fund Community Development",    # Change "A" to "Alpha"
+    Org_name == "Lendistry" ~ "B.S.D. Capital, Inc. dba Lendistry",    # Change "B" to "Bravo"
+    Org_name == "BlueHub Loan Fund, Inc." ~ "BlueHub Capital, Inc.",  # Change "C" to "Charlie"
+    Org_name == "Bridge Impact Capital" ~ "BRIDGE COMMUNITY DEVELOPMENT, INC.",    # Change "D" to "Delta" 
+    
+    Org_name == "CAHEC Capital Inc" ~ "CAHEC New Markets, LLC",    # Change "D" to "Delta" 
+    Org_name == "Carver Federal Savings Bank" ~ "Carver Community Development Corporation",    # Change "D" to "Delta"
+    Org_name == "Carver Community Development Corporation" ~ "Carver Federal Savings Bank",    # Change "D" to "Delta"
+    Org_name == "Coastal Enterprises, Inc." ~ "CEI Capital Management LLC",    # Change "D" to "Delta" 
+    
+    Org_name == "Cinnaire Lending Corporation" ~ "Cinnaire New Markets LLC",    # Change "D" to "Delta" 
+    Org_name == "Community Ventures Corporation, Inc." ~ "Cinnaire New Markets LLC",    # Change "D" to "Delta" 
+    Org_name == "Enterprise Community Loan Fund, Inc." ~ "ESIC New Markets Partners LP",    # Change "D" to "Delta" 
+    Org_name == "Florida Community Loan Fund, Inc." ~ "Florida Community Loan Fund",    # Change "D" to "Delta" 
+    
+    Org_name == "Genesis LA Economic Growth Corporation" ~ "Genesis LA CDE LLC",    # Change "D" to "Delta" 
+    Org_name == "Harbor Bankshares Corporation" ~ "HARBOR BANKSHARES CORPORATION",    # Change "D" to "Delta" 
+    Org_name == "Invest Detroit Foundation" ~ "Invest Detroit CDE",    # Change "D" to "Delta" 
+    Org_name == "MHIC, LLC" ~ "MHIC NE New Markets CDE II LLC",    # Change "D" to "Delta" 
+    
+    Org_name == "Community Reinvestment Fund, Inc" ~ "National New Markets Tax Credit Fund, Inc.",    # Change "D" to "Delta" 
+    Org_name == "Northside Community Development Fund" ~ "Neighborhood Community Development Fund",    # Change "D" to "Delta" 
+    Org_name == "Finance Fund Capital Corporation" ~ "Ohio Community Development Finance Fund",    # Change "D" to "Delta" 
+    Org_name == "Southeast Community Capital Corporation DBA Pathway Lending" ~ "Pathway Lending CDE, LLC",    # Change "D" to "Delta" 
+    
+    Org_name == "PeopleFund" ~ "PeopleFund NMTC, LLC",    # Change "D" to "Delta" 
+    Org_name == "University Financial Corp." ~ "SB New Markets CDE LLC",    # Change "D" to "Delta" 
+    
+    
+    TRUE ~ Org_name               # Keep original value if none of the above conditions match
+  )) 
+
+loan_demo_cdfi <- merge(loan_demo_cdfi, cdfi_type, by="Org_name", all.x=TRUE) 
+
+#sum(is.na(loan_demo_cdfi$`Financial Institution Type`) | loan_demo_cdfi$`Financial Institution Type` == "") 
+
+
+
+# Add a new column 'type' based on the values in 'Org_name'
+loan_demo_cdfi <- loan_demo_cdfi %>%
+  mutate(`Financial Institution Type 2` = case_when(
+    Org_name == "Advantage Capital Community Development Fund, LLC" ~ "Venture Capital Fund",
+    Org_name == "AI Wainwright LLC" ~ "Loan Fund",
+    Org_name == "Albina Equity Fund I, LLC" ~ "Bank or Thrift", 
+    Org_name == "Banc of America CDE, LLC" ~ "Loan Fund", 
+    
+    Org_name == "CCG Community Partners, LLC" ~ "Venture Capital Fund",
+    Org_name == "Chase Community Development Corporation" ~ "Depository Institution Holding Company", 
+    Org_name == "Chase New Markets Corporation" ~ "Depository Institution Holding Company", 
+    Org_name == "Cincinnati New Markets Fund, LLC" ~ "Loan Fund", 
+    
+    Org_name == "Colorado Growth and Revitalization Fund LLC" ~ "Loan Fund",
+    Org_name == "Community Reinvestment Fund New Markets I LP" ~ "Venture Capital Fund", 
+    Org_name == "Consortium America, LLC" ~ "Venture Capital Fund", 
+    Org_name == "DBL Equity Partners" ~ "Loan Fund", 
+    
+    Org_name == "Ecotrust CDE LLC" ~ "Loan Fund",
+    Org_name == "Enhanced Community Development, LLC" ~ "Venture Capital Fund", 
+    Org_name == "Enterprise Financial CDE, LLC" ~ "Bank or Thrift", 
+    Org_name == "Evernorth Rural Ventures, Inc." ~ "Loan Fund", 
+    
+    Org_name == "Finance New Mexico, LLC" ~ "Loan Fund",
+    Org_name == "Five Points Community Capital, LLC" ~ "Loan Fund", 
+    Org_name == "GS New Markets Fund, LLC" ~ "Depository Institution Holding Company", 
+    Org_name == "Gulf Coast Housing Partnership, Inc." ~ "Loan Fund", 
+    
+    Org_name == "Habitat for Humanity NMTC, LLC" ~ "Loan Fund",
+    Org_name == "Heartland Renaissance Fund, LLC" ~ "Venture Capital Fund", 
+    Org_name == "Iowa Community Development LC" ~ "Loan Fund", 
+    Org_name == "Kroger Community Development Entity, LLC" ~ "Loan Fund",  # Default case 
+    
+    Org_name == "L.A. Charter School New Markets CDE, LLC" ~ "Loan Fund",
+    Org_name == "MuniStrategies, LLC" ~ "Venture Capital Fund", 
+    Org_name == "NCALL Community Investment, LLC" ~ "Loan Fund", 
+    Org_name == "New Jersey Redevelopment Authority" ~ "Loan Fund",  # Default case 
+    
+    Org_name == "New Market Opportunity Fund CDE LLC" ~ "Loan Fund",
+    Org_name == "New Markets Redevelopment LLC" ~ "Loan Fund", 
+    Org_name == "North Coast Community Development Corporation" ~ "Loan Fund", 
+    Org_name == "Pacesetter CDE, Inc." ~ "Venture Capital Fund",  # Default case 
+    
+    Org_name == "PB Community Impact Fund, LLC" ~ "Loan Fund",
+    Org_name == "Phoenix Community Development and Investment Corporation" ~ "Loan Fund", 
+    Org_name == "PNC Community Partners, Inc." ~ "Bank or Thrift", 
+    Org_name == "REI New Markets Investment, LLC" ~ "Loan Fund",  # Default case 
+    
+    Org_name == "Related Community Development Group, LLC" ~ "Venture Capital Fund",
+    Org_name == "TD Community Development Corporation" ~ "Depository Institution Holding Company", 
+    Org_name == "Texas LIC Development Company LLC" ~ "Loan Fund", 
+    Org_name == "The Valued Advisor Fund, LLC" ~ "Loan Fund",  # Default case 
+    
+    Org_name == "Travois New Markets, LLC" ~ "Loan Fund",
+    Org_name == "Truist Community Development Enterprises, LLC a Domestic Limited Liability Company" ~ "Loan Fund", 
+    Org_name == "UA LLC" ~ "Loan Fund", 
+    Org_name == "Wachovia Community Development Enterprises, LLC" ~ "Bank or Thrift",  # Default case 
+    
+    Org_name == "Waveland Community Development, LLC" ~ "Venture Capital Fund",
+    Org_name == "Wells Fargo Community Development Enterprises, Inc." ~ "Bank or Thrift", 
+    Org_name == "Wisconsin Business Growth Fund, Inc." ~ "Loan Fund" # Default case 
+    
+  )) 
+
+
+
+
+loan_demo_cdfi <- loan_demo_cdfi %>%
+  mutate(`Financial Institution Type 3` = if_else(
+    is.na(`Financial Institution Type`),  # Check if 'Financial Institution Type' is empty
+    `Financial Institution Type 2`,                                # If TRUE, use value from 'type'
+    `Financial Institution Type`         # If FALSE, use value from 'Financial Institution Type'
+  ))
+
+
+sum(is.na(loan_demo_cdfi$`Financial Institution Type 3`) | loan_demo_cdfi$`Financial Institution Type 3` == "") 
+
+
+loan_demo_cdfi$Type <- ifelse(loan_demo_cdfi$`Financial Institution Type 3` == "Bank or Thrift" | 
+                                loan_demo_cdfi$`Financial Institution Type 3` =="Bank Holding Company" | 
+                                loan_demo_cdfi$`Financial Institution Type 3` =="Depository Institution Holding Company", 
+                              1, 2)
+
+
+
+
+#loan_demo_cdfi_clean <- loan_demo_cdfi %>% filter(!is.na(Type))
+loan_demo_cdfi_clean <- loan_demo_cdfi 
+
+
+
+loan_demo_cdfi_clean <- loan_demo_cdfi_clean %>%
+  rename(`Community Development Entity (CDE) Name` = Org_name, 
+         `CDFI State` = State.y, 
+         `CDFI City` = City.y, 
+         `Project State` = State.x, 
+         `Project City` = City.x
+         ) 
+
+
+loan_demo_cdfi_clean$`Financial Institution Type` <- loan_demo_cdfi_clean$`Financial Institution Type 3` 
+
+loan_demo_cdfi_clean$`Financial Institution Type 3` <- NULL 
+loan_demo_cdfi_clean$`Financial Institution Type 2` <- NULL 
+
+
+
+loan_demo_cdfi_clean %>%
+  group_by(Type) %>%
+  summarize( 
+    
+    numSML_origin_less100K = mean(numSML_origin_less100K, na.rm = TRUE),
+    amtSML_origin_less100K = mean(amtSML_origin_less100K, na.rm = TRUE), 
+    
+    numSML_origin_100K250K = mean(numSML_origin_100K250K, na.rm = TRUE),
+    amtSML_origin_100K250K = mean(amtSML_origin_100K250K, na.rm = TRUE), 
+    
+    numSML_origin_250K1M = mean(numSML_origin_250K1M, na.rm = TRUE),
+    amtSML_origin_250K1M = mean(amtSML_origin_250K1M, na.rm = TRUE), 
+    
+    numSML_origin_1M = mean(numSML_origin_1M, na.rm = TRUE),
+    amtSML_origin_1M = mean(amtSML_origin_1M, na.rm = TRUE), 
+    
+    Total_population = mean(Total_population, na.rm = TRUE),
+    pop_65over = mean(pop_65over, na.rm = TRUE), 
+    
+    ratio_65over = mean(ratio_65over, na.rm = TRUE),
+    pop_non_minority = mean(pop_non_minority, na.rm = TRUE), 
+    
+    ratio_non_minority = mean(ratio_non_minority, na.rm = TRUE),
+    housingunits = mean(housingunits, na.rm = TRUE), 
+    
+    ratio_bachelor = mean(ratio_bachelor, na.rm = TRUE),
+    median_earning = mean(median_earning, na.rm = TRUE), 
+    
+    unemployment_rate = mean(unemployment_rate, na.rm = TRUE),
+    Mean_commutetime = mean(Mean_commutetime, na.rm = TRUE), 
+    
+    Median_household_income = mean(Median_household_income, na.rm = TRUE),
+    Mean_household_income = mean(Mean_household_income, na.rm = TRUE), 
+    
+    Supplemental_income = mean(Supplemental_income, na.rm = TRUE),
+    Median_family_income = mean(Median_family_income, na.rm = TRUE), 
+    
+    health_insurance_coverage = mean(health_insurance_coverage, na.rm = TRUE),
+    poverty_ratio = mean(poverty_ratio, na.rm = TRUE) 
+
+    
+  ) -> grouped_mean 
+
+
+
+
+
+loan_demo_cdfi_clean %>%
+  group_by(Type) %>%
+  summarize( 
+    
+    numSML_origin_less100K = sd(numSML_origin_less100K, na.rm = TRUE),
+    amtSML_origin_less100K = sd(amtSML_origin_less100K, na.rm = TRUE), 
+    
+    numSML_origin_100K250K = sd(numSML_origin_100K250K, na.rm = TRUE),
+    amtSML_origin_100K250K = sd(amtSML_origin_100K250K, na.rm = TRUE), 
+    
+    numSML_origin_250K1M = sd(numSML_origin_250K1M, na.rm = TRUE),
+    amtSML_origin_250K1M = sd(amtSML_origin_250K1M, na.rm = TRUE), 
+    
+    numSML_origin_1M = sd(numSML_origin_1M, na.rm = TRUE),
+    amtSML_origin_1M = sd(amtSML_origin_1M, na.rm = TRUE), 
+    
+    Total_population = sd(Total_population, na.rm = TRUE),
+    pop_65over = sd(pop_65over, na.rm = TRUE), 
+    
+    ratio_65over = sd(ratio_65over, na.rm = TRUE),
+    pop_non_minority = sd(pop_non_minority, na.rm = TRUE), 
+    
+    ratio_non_minority = sd(ratio_non_minority, na.rm = TRUE),
+    housingunits = sd(housingunits, na.rm = TRUE), 
+    
+    ratio_bachelor = sd(ratio_bachelor, na.rm = TRUE),
+    median_earning = sd(median_earning, na.rm = TRUE), 
+    
+    unemployment_rate = sd(unemployment_rate, na.rm = TRUE),
+    Mean_commutetime = sd(Mean_commutetime, na.rm = TRUE), 
+    
+    Median_household_income = sd(Median_household_income, na.rm = TRUE),
+    Mean_household_income = sd(Mean_household_income, na.rm = TRUE), 
+    
+    Supplemental_income = sd(Supplemental_income, na.rm = TRUE),
+    Median_family_income = sd(Median_family_income, na.rm = TRUE), 
+    
+    health_insurance_coverage = sd(health_insurance_coverage, na.rm = TRUE),
+    poverty_ratio = sd(poverty_ratio, na.rm = TRUE) 
+    
+    
+  ) -> grouped_mean 
+
+
+
+
+var_label(loan_demo_cdfi_clean$`Project ID`) <- "Unique Project ID" 
+var_label(loan_demo_cdfi_clean$`Transaction ID`) <- "Unique Financial Note ID "
+var_label(loan_demo_cdfi_clean$`Metro/Non-Metro, 2010 Census`) <- "Census tracts contained within Metro or Non-Metro counties as defined by OMB"
+
+var_label(loan_demo_cdfi_clean$`QLICI Amount`) <- "The amount of the loan/investment"
+var_label(loan_demo_cdfi_clean$`Project City`) <- "City where project is located"
+var_label(loan_demo_cdfi_clean$`Project State`) <- "State where project is located" 
+
+var_label(loan_demo_cdfi_clean$`Zip Code`) <- "Project zip code"
+var_label(loan_demo_cdfi_clean$`Purpose of Investment`) <- "The primary purpose of the Financial Note"
+var_label(loan_demo_cdfi_clean$`QALICB Type`) <- "Whether the Project is a real estate investment (RE), non-real estate investment (NRE), or an investment in another CDE" 
+
+var_label(loan_demo_cdfi_clean$`Multi-Tract QLICI`) <- "Whether the Project spans multiple tracts (YES) or a single tract (NO)"
+var_label(loan_demo_cdfi_clean$`Community Development Entity (CDE) Name`) <- "Allocatee name" 
+var_label(loan_demo_cdfi_clean$geoid) <- "Census tract FIPS code (2010)" 
+
+var_label(loan_demo_cdfi_clean$year) <- "Date/Loan origination date" 
+var_label(loan_demo_cdfi_clean$`CDFI City`) <- "City where CDFI is located" 
+var_label(loan_demo_cdfi_clean$`CDFI State`) <- "State where CDFI is located" 
+
+var_label(loan_demo_cdfi_clean$Zipcode) <- "Zip code where CDFI is located" 
+var_label(loan_demo_cdfi_clean$Address1) <- "CDFI Address Line 1" 
+var_label(loan_demo_cdfi_clean$Address2) <- "CDFI Address Line 2" 
+
+var_label(loan_demo_cdfi_clean$`Organization Website`) <- "CDFI website" 
+var_label(loan_demo_cdfi_clean$Type) <- "Type of CDFI (1 if bank holding corp, bank or thrift, credit union, or depository inst.; 2 if loan fund, venture capital or venture capital fund)" 
+var_label(loan_demo_cdfi_clean$`Native CDFI (Y/N)`) <- "Y if CDFI is native, N otherwise" 
+
+loan_demo_cdfi_clean <- loan_demo_cdfi_clean %>%
+  rename(`Geo ID` = geoid, 
+         Year = year, 
+         `State FIPS` = state, 
+         `County FIPS` = county, 
+         `FIPS County-State` = fipscounty, 
+          Metro_Non_Metro_2010_Census = `Metro/Non-Metro, 2010 Census`, 
+          Native_CDFI = `Native CDFI (Y/N)`, 
+          Community_Development_Entity = `Community Development Entity (CDE) Name`) 
+
+var_label(loan_demo_cdfi_clean$`State FIPS`) <- "State FIPS code where project is located" 
+var_label(loan_demo_cdfi_clean$`County FIPS`) <- "County FIPS code where project is located" 
+var_label(loan_demo_cdfi_clean$`FIPS County-State`) <- "County-State FIPS code where project is located" 
+
+
+# Make all column names syntactically valid and replace periods with underscores
+names(loan_demo_cdfi_clean) <- make.names(names(loan_demo_cdfi_clean))
+names(loan_demo_cdfi_clean) <- gsub("\\.", "_", names(loan_demo_cdfi_clean)) 
+
+
+loan_demo_cdfi_na <- loan_demo_cdfi_clean %>% filter(is.na(Type)) 
+loan_demo_cdfi_clean <- loan_demo_cdfi_clean %>% filter(!is.na(Type)) 
+
+loan_demo_cdfi_na$Type <- "Unmatched"
+
+
+# Save the data frame as a .dta file 
+write_dta(loan_demo_cdfi_clean, "mainCDFI.dta") 
+
+write_dta(loan_demo_cdfi_na, "mainCDFI_unmatched.dta") 
+
+mainCDFI <- read_dta("mainCDFI_unmatched.dta") 
+
+
+
+grouped_count_clean <- loan_demo_cdfi_clean %>%
+  group_by(year, Type) %>%
+  summarize(count = n(), 
+            sum = sum(`QLICI Amount`)) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+loan_demo_cdfi$Type <- ifelse(loan_demo_cdfi$Type <= 2, "A", "NA") 
+
+grouped_count <- loan_demo_cdfi %>%
+  group_by(year, Type) %>%
+  summarize(count = n(), 
+            sum = sum(`QLICI Amount`)) 
+
+
+
+
+loan_demo_cdfi %>%
+  group_by(Type) %>%
+  summarize( 
+    
+    numSML_origin_less100K = mean(numSML_origin_less100K, na.rm = TRUE),
+    amtSML_origin_less100K = mean(amtSML_origin_less100K, na.rm = TRUE), 
+    
+    numSML_origin_100K250K = mean(numSML_origin_100K250K, na.rm = TRUE),
+    amtSML_origin_100K250K = mean(amtSML_origin_100K250K, na.rm = TRUE), 
+    
+    numSML_origin_250K1M = mean(numSML_origin_250K1M, na.rm = TRUE),
+    amtSML_origin_250K1M = mean(amtSML_origin_250K1M, na.rm = TRUE), 
+    
+    numSML_origin_1M = mean(numSML_origin_1M, na.rm = TRUE),
+    amtSML_origin_1M = mean(amtSML_origin_1M, na.rm = TRUE), 
+    
+    Total_population = mean(Total_population, na.rm = TRUE),
+    pop_65over = mean(pop_65over, na.rm = TRUE), 
+    
+    ratio_65over = mean(ratio_65over, na.rm = TRUE),
+    pop_non_minority = mean(pop_non_minority, na.rm = TRUE), 
+    
+    ratio_non_minority = mean(ratio_non_minority, na.rm = TRUE),
+    housingunits = mean(housingunits, na.rm = TRUE), 
+    
+    ratio_bachelor = mean(ratio_bachelor, na.rm = TRUE),
+    median_earning = mean(median_earning, na.rm = TRUE), 
+    
+    unemployment_rate = mean(unemployment_rate, na.rm = TRUE),
+    Mean_commutetime = mean(Mean_commutetime, na.rm = TRUE), 
+    
+    Median_household_income = mean(Median_household_income, na.rm = TRUE),
+    Mean_household_income = mean(Mean_household_income, na.rm = TRUE), 
+    
+    Supplemental_income = mean(Supplemental_income, na.rm = TRUE),
+    Median_family_income = mean(Median_family_income, na.rm = TRUE), 
+    
+    health_insurance_coverage = mean(health_insurance_coverage, na.rm = TRUE),
+    poverty_ratio = mean(poverty_ratio, na.rm = TRUE) 
+    
+    
+  ) -> grouped_mean_na 
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Subset the dataframe to include only 'Financial_Amount' and 'Financial_Institution_Type' 
+subset_data <- loan_demo_cdfi_clean[, c("Geo_ID", "numSML_origin_less100K", "amtSML_origin_less100K", "numSML_origin_100K250K", "amtSML_origin_100K250K",    
+                                  "numSML_origin_250K1M", "amtSML_origin_250K1M", "numSML_origin_1M", "amtSML_origin_1M", 
+                                  "Total_population", "pop_65over", "ratio_65over", "pop_non_minority", "ratio_non_minority", "housingunits", 
+                                  "ratio_bachelor", "median_earning", "unemployment_rate", "Mean_commutetime", "Median_household_income", 
+                                  "Mean_household_income", "Supplemental_income", "Median_family_income", "health_insurance_coverage", "poverty_ratio", "Type")] 
+
+# Separate data for Type A and Type B 
+type_1 <- subset(subset_data, Type==1) 
+type_2 <- subset(subset_data, Type==2) 
+
+unique(c(unique(type_1$geoid), unique(type_2$geoid)))
+
+# Perform t-test for 'Financial_Amount' between Type A and Type B
+t_test_result <- t.test(type_1, type_2) 
+
+
+      
+
+
+# Function to perform t-tests for all variables based on the Type variable
+perform_t_tests <- function(data, group_var) {
+  # Get the list of numeric variables excluding the grouping variable
+  numeric_vars <- data %>% select(-one_of(group_var)) %>% select_if(is.numeric) %>% names()
+  
+  # Initialize a list to store the t-test results
+  t_test_results <- list()
+  
+  # Loop through each numeric variable and perform t-test
+  for (var in numeric_vars) {
+    formula <- as.formula(paste(var, "~", group_var))
+    t_test_result <- t.test(formula, data = data)
+    t_test_results[[var]] <- t_test_result
+  }
+  
+  return(t_test_results)
+}
+
+# Run t-tests for all variables based on the 'Type' variable
+t_test_results <- perform_t_tests(subset_data, "Type")
+
+# Print t-test results
+t_test_results
+
+
+
+
+
+
+                                     
+                                         
+                                    
+                                                   
+                           
+
+                                               
+                                             
+
+Advantage Capital Community Development Fund, LLC ~ Venture Capital Fund 
+AI Wainwright LLC ~ Loan Fund 
+Albina Equity Fund I, LLC ~ Bank or Thrift 
+Banc of America CDE, LLC ~ Loan Fund 
+CCG Community Partners, LLC ~ Venture Capital Fund 
+Chase Community Development Corporation ~ Depository Institution Holding Company 
+Chase New Markets Corporation ~ Depository Institution Holding Company
+Cincinnati New Markets Fund, LLC ~ Loan Fund 
+Colorado Growth and Revitalization Fund LLC ~ Loan Fund 
+Community Reinvestment Fund New Markets I LP ~ Venture Capital Fund 
+Consortium America, LLC ~ Venture Capital Fund
+DBL Equity Partners ~ Loan Fund 
+Ecotrust CDE LLC ~ Loan Fund 
+Enhanced Community Development, LLC ~ Venture Capital Fund
+Enterprise Financial CDE, LLC ~ Bank or Thrift
+Evernorth Rural Ventures, Inc. ~ Loan Fund 
+Finance New Mexico, LLC ~ Loan Fund                                        
+Five Points Community Capital, LLC ~ Loan Fund                                           
+GS New Markets Fund, LLC ~ Depository Institution Holding Company                            
+Gulf Coast Housing Partnership, Inc. ~ Loan Fund
+Habitat for Humanity NMTC, LLC ~ Loan Fund                  
+Heartland Renaissance Fund, LLC ~ Venture Capital Fund                                       
+Iowa Community Development LC ~ Loan Fund
+Kroger Community Development Entity, LLC ~ Loan Fund
+L.A. Charter School New Markets CDE, LLC ~ Loan Fund
+MuniStrategies, LLC ~ Venture Capital Fund                                                 
+NCALL Community Investment, LLC ~ Loan Fund 
+New Jersey Redevelopment Authority ~ Loan Fund 
+New Market Opportunity Fund CDE LLC ~ Loan Fund                                                     
+New Markets Redevelopment LLC ~ Loan Fund          
+North Coast Community Development Corporation ~ Loan Fund
+Pacesetter CDE, Inc. ~ Venture Capital Fund                                                
+PB Community Impact Fund, LLC ~ Loan Fund       
+Phoenix Community Development and Investment Corporation ~ Loan Fund
+PNC Community Partners, Inc. ~ Bank or Thrift          
+REI New Markets Investment, LLC ~ Loan Fund 
+Related Community Development Group, LLC ~ Venture Capital Fund                                  
+TD Community Development Corporation ~ Depository Institution Holding Company      
+Texas LIC Development Company LLC ~ Loan Fund 
+The Valued Advisor Fund, LLC ~ Loan Fund  
+Travois New Markets, LLC ~ Loan Fund                                                             
+Truist Community Development Enterprises, LLC a Domestic Limited Liability Company ~ Loan Fund                                             
+UA LLC ~ Loan Fund                                                      
+Wachovia Community Development Enterprises, LLC ~ Bank or Thrift                                              
+Waveland Community Development, LLC ~ Venture Capital Fund                                                    
+Wells Fargo Community Development Enterprises, Inc. ~ Bank or Thrift                                                        
+Wisconsin Business Growth Fund, Inc. ~ Loan Fund                 
+
+
+
+
+
+
+
+
+
+
+
+# merging data 
+
+setwd("C:/Users/syedm/Downloads/FY2021_Data_Documentation_Instruction") 
+
+CLR2021 <- read.csv("releaseCLR_fy21.csv") 
+TLR2021 <- read.csv("releaseTLR_fy21.csv") 
+
+setwd("C:/Users/syedm/Downloads/FY2020_Data_Documentation_Instruction") 
+
+CLR2020 <- read.csv("releaseCLR_fy20.csv") 
+TLR2020 <- read.csv("releaseTLR_fy20.csv") 
+
+setwd("C:/Users/syedm/Downloads/FY2019_Data_Documentation_Instruction") 
+
+CLR2019 <- read.csv("releaseCLR_fy19.csv") 
+TLR2019 <- read.csv("releaseTLR_fy19.csv") 
+
+setwd("C:/Users/syedm/Downloads/FY2018_Data_Documentation_Instruction") 
+
+CLR2018 <- read.csv("releaseCLR_fy18.csv") 
+TLR2018 <- read.csv("releaseTLR_fy18.csv") 
+
+CLR <- rbind(CLR2021, CLR2020, CLR2019, CLR2018) 
+TLR <- rbind(TLR2021, TLR2020, TLR2019, TLR2018) 
+
+var_label(TLR$trans_id) <- "Transaction ID" 
+var_label(TLR$fiscalyear) <- "Fiscal Year" 
+var_label(TLR$originalamount) <- "Original Loan/Investment Amount" 
+var_label(TLR$projectfipscode_2010) <- "Project FIPS Code" 
+
+var_label(TLR$investeetype) <- "Investee/Borrower Type" 
+var_label(TLR$dateclosed) <- "Date Originated" 
+var_label(TLR$purpose) <- "Purpose" 
+var_label(TLR$transactiontype) <- "Transaction Type" 
+var_label(TLR$originalinterestrate) <- "Interest Rate" 
+
+var_label(TLR$interesttype) <- "Interest Type" 
+var_label(TLR$points) <- "Points" 
+var_label(TLR$originationfees) <- "Origination Fees" 
+var_label(TLR$amortizationtype) <- "Amortization Type" 
+var_label(TLR$equitylikefeatures) <- "Equity-Like Features" 
+
+var_label(TLR$originalterm) <- "Term" 
+var_label(TLR$guarantee) <- "Guarantee by Third Party" 
+var_label(TLR$jobtype) <- "Type of Jobs Reported" 
+var_label(TLR$jobsource) <- "Source of Job Estimates" 
+var_label(TLR$jobsourceother) <- "Source of Job Estimates – Other" 
+
+var_label(TLR$communityfacility) <- "Community Facility" 
+var_label(TLR$descofotherotpendusers) <- "Description of Other Approved OTP End Users" 
+var_label(TLR$forgivableloan) <- "Forgivable Loan" 
+var_label(TLR$naicscode) <- "NAICS" 
+var_label(TLR$datebusinessestablished) <- "Date Business Established" 
+
+var_label(TLR$entitystructure) <- "Entity Structure" 
+var_label(TLR$minorityownedorcontrolled) <- "Minority Owned or Controlled" 
+var_label(TLR$womenownedorcontrolled) <- "Women Owned or Controlled" 
+var_label(TLR$descofotherotp) <- "Description of Other Approved OTP" 
+var_label(TLR$lowincomeownedorcontrolled) <- "Low-Income Owned or Controlled" 
+
+var_label(TLR$lowincomestatus) <- "Low-Income Status" 
+var_label(TLR$othertargetedpopulations) <- "Other Targeted Populations" 
+var_label(TLR$litpendusers) <- "LITP End Users" 
+var_label(TLR$otpendusers) <- "OTP End Users" 
+var_label(TLR$iaendusers) <- "IA End Users" 
+
+var_label(TLR$gender) <- "Gender" 
+var_label(TLR$race) <- "Race" 
+var_label(TLR$hispanicorigin) <- "Hispanic Origin" 
+var_label(TLR$femaleheadedhousehold) <- "Female-Headed Household" 
+var_label(TLR$firsttimehomebuyer) <- "First-Time Home Buyer" 
+
+var_label(TLR$educationfacility) <- "Capacity of Educational Community Facility" 
+var_label(TLR$childcarefacility) <- "Capacity of Childcare Community Facility" 
+var_label(TLR$healthcarefacility) <- "Capacity of Healthcare Community Facility" 
+var_label(TLR$artscenterfacility) <- "Capacity of Arts Center Community Facility" 
+var_label(TLR$otherfacility) <- "Capacity of Other Community Facility" 
+
+
+var_label(TLR$arearealestatetotal) <- "Square Feet of Real Estate – Total" 
+var_label(TLR$sqfremanufacture) <- "Square Feet of Real Estate – Manufacturing" 
+var_label(TLR$sqfreoffice) <- "Square Feet of Real Estate – Office" 
+var_label(TLR$sqfreretail) <- "Square Feet of Real Estate-Retail" 
+var_label(TLR$affordablehousesale) <- "Affordable Housing Units – Sale" 
+
+
+var_label(TLR$affordablehouserent) <- "Affordable Housing Units – Rental" 
+var_label(TLR$loanclosedstatus) <- "Loan Status" 
+var_label(TLR$bankedattimeofintake) <- "Banked at Time of Intake" 
+var_label(TLR$annualgrossrevenue) <- "Annual Gross Revenue from Business Operations at Time of Loan/Investment Origination" 
+var_label(TLR$totalprojectcost) <- "Total Project Cost" 
+
+var_label(TLR$projectedftetenants) <- "Projected Permanent Jobs to be Created at Tenant Businesses" 
+var_label(TLR$projectedjobsbusiness) <- "Projected Permanent Jobs to Be Created at Businesses Financed" 
+var_label(TLR$projectedjobsconstruction) <- "Projected Jobs to be Created – Construction" 
+var_label(TLR$housingunitsrent) <- "Housing Units – Rental" 
+var_label(TLR$housingunitssale) <- "Housing Units – Sale" 
+
+
+
+
+
+
+var_label(CLR$trans_id) <- "Transaction ID" 
+var_label(CLR$fiscalyear) <- "Fiscal Year" 
+var_label(CLR$projectfipscode_2010) <- "FIPS Code" 
+var_label(CLR$purpose) <- "Purpose" 
+var_label(CLR$totalamount) <- "Total Originated Amount" 
+
+
+var_label(CLR$totalnumber) <- "Total Originated Number" 
+var_label(CLR$litpamount) <- "LITP Amount" 
+var_label(CLR$litpnumber) <- "LITP Number" 
+var_label(CLR$otpamount) <- "OTP Amount" 
+var_label(CLR$otpnumber) <- "OTP Number" 
+
+setwd("C:/Users/syedm/Desktop/BFR Spatial/CDFI") 
+
+write_dta(TLR, "Transaction_Level_Report_2018_2021.dta") 
+
+write_dta(CLR, "Consumer_Loan_Report_2018_2021.dta") 
+
+
+# sum of Type 1 and Type 2 loans by geoid and year 
+
+
+type_matched <- loan_demo_cdfi_clean %>%
+  group_by(Geo_ID, Year) %>%
+  summarise(
+    Type1_TotalLoans = sum(QLICI_Amount[Type == 1], na.rm = TRUE),
+    Type1_NumberofLoans = sum(Type[Type == 1], na.rm = TRUE), 
+    Type2_TotalLoans = sum(QLICI_Amount[Type == 2], na.rm = TRUE), 
+    Type2_NumberofLoans = sum(Type[Type == 2], na.rm = TRUE)/2, 
+  ) 
+
+type_unmatched <- loan_demo_cdfi_na %>%
+  group_by(Geo_ID, Year) %>%
+  summarise(
+    Type_Unmatched_TotalLoans = sum(QLICI_Amount, na.rm = TRUE),
+    Type_Unmatched_NumberofLoans = n() 
+  ) 
+
+
+
+loan_demo <- loan_demo %>% rename(Geo_ID = geoid, Year = year) 
+
+loan_demo <- merge(loan_demo, type_matched, by=c("Geo_ID", "Year"), all.x=TRUE) 
+
+loan_demo <- merge(loan_demo, type_unmatched, by=c("Geo_ID", "Year"), all.x=TRUE) 
+
+# Replace NA with 0 in specific columns
+loan_demo <- loan_demo %>%
+  mutate(
+    Type1_TotalLoans = replace_na(Type1_TotalLoans, 0), 
+    Type2_TotalLoans = replace_na(Type2_TotalLoans, 0), 
+    Type1_NumberofLoans = replace_na(Type1_NumberofLoans, 0), 
+    Type2_NumberofLoans = replace_na(Type2_NumberofLoans, 0), 
+    
+    Type_Unmatched_TotalLoans = replace_na(Type_Unmatched_TotalLoans, 0), 
+    Type_Unmatched_NumberofLoans = replace_na(Type_Unmatched_NumberofLoans, 0) 
+  ) 
+
+# Find values in result$Geo_ID that do not exist in loan_demo$Geo_ID
+# unique_geo_ids <- setdiff(type_matched$Geo_ID, loan_demo$Geo_ID) 
+
+# non matching rows
+non_matching_rows <- anti_join(type_matched, loan_demo, by = c("Geo_ID", "Year"))
+print(non_matching_rows)
+
