@@ -17,7 +17,7 @@ ui <- fluidPage(
   titlePanel("Percentage of Specific Types of Producers"),
   sidebarLayout(
     sidebarPanel(
-      textInput("api_key", "Enter your USDA API key:", value = "4C0D7DCA-D6F6-30F7-84A2-757322710936"),
+      textInput("api_key", "Enter your USDA API key:", value = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
       selectInput("data_item", "Select Data Item:", 
                   choices = list("Beginning Farmers" = "PRODUCERS, YEARS ON ANY OPERATION, LT 11 YEARS - NUMBER OF PRODUCERS",
                                  "Female Farmers" = "PRODUCERS, FEMALE, DAY TO DAY DECISIONMAKING - NUMBER OF PRODUCERS",
@@ -49,7 +49,7 @@ server <- function(input, output) {
     geo_level <- ifelse(input$data_item == "PRODUCERS, FEMALE, DAY TO DAY DECISIONMAKING - NUMBER OF PRODUCERS", "STATE", "COUNTY")
     
     QS_BFR <- getQuickstat(
-      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      key = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
       program = "CENSUS",
       sector = "DEMOGRAPHICS",
       group = "PRODUCERS",
@@ -73,7 +73,7 @@ server <- function(input, output) {
     }
     
     QS_TOTAL_2022 <- getQuickstat(
-      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      key = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
       program = "CENSUS",
       sector = "DEMOGRAPHICS",
       group = "PRODUCERS",
@@ -94,7 +94,7 @@ server <- function(input, output) {
       
       
       QS_BFR_name <- getQuickstat(
-        key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+        key = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
         program = "CENSUS",
         sector = "DEMOGRAPHICS",
         group = "PRODUCERS",
