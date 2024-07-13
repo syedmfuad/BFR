@@ -1,0 +1,175 @@
+library(shiny)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(haven)
+library(tidyUSDA)
+library(sf)
+library(units)
+library(ggrepel)
+library(ggplot2)
+library(RColorBrewer)
+library(ggspatial)
+library(DT)
+
+# Define UI
+ui <- fluidPage(
+  titlePanel("Percentage of Specific Types of Producers"),
+  sidebarLayout(
+    sidebarPanel(
+      textInput("api_key", "Enter your USDA API key:", value = "4C0D7DCA-D6F6-30F7-84A2-757322710936"),
+      selectInput("data_item", "Select Data Item:", 
+                  choices = list("Beginning Farmers" = "PRODUCERS, YEARS ON ANY OPERATION, LT 11 YEARS - NUMBER OF PRODUCERS",
+                                 "Female Farmers" = "PRODUCERS, FEMALE, DAY TO DAY DECISIONMAKING - NUMBER OF PRODUCERS",
+                                 "Young Farmers" = "PRODUCERS, AGE LT 35 - NUMBER OF PRODUCERS",
+                                 "Very Young Farmers" = "PRODUCERS, YEARS ON PRESENT OPERATION, LT 3 YEARS - NUMBER OF PRODUCERS")),
+      selectInput("view_type", "Select View Type:", 
+                  choices = list("Map" = "map", "Table" = "table", "Bar Chart" = "bar_chart"))
+    ),
+    mainPanel(
+      conditionalPanel(
+        condition = "input.view_type == 'map'",
+        plotOutput("map")
+      ),
+      conditionalPanel(
+        condition = "input.view_type == 'table'",
+        dataTableOutput("table")
+      ),
+      conditionalPanel(
+        condition = "input.view_type == 'bar_chart'",
+        plotOutput("bar_chart")
+      )
+    )
+  )
+)
+
+# Define server logic
+server <- function(input, output) {
+  data <- reactive({
+    geo_level <- ifelse(input$data_item == "PRODUCERS, FEMALE, DAY TO DAY DECISIONMAKING - NUMBER OF PRODUCERS", "STATE", "COUNTY")
+    
+    QS_BFR <- getQuickstat(
+      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      program = "CENSUS",
+      sector = "DEMOGRAPHICS",
+      group = "PRODUCERS",
+      commodity = "PRODUCERS",
+      category = "PRODUCERS",
+      data_item = input$data_item,
+      geographic_level = geo_level,
+      year = "2022"
+    ) %>%
+      mutate(fips = paste0(state_fips_code, county_code)) %>%
+      rename(bfr = Value, state = state_fips_code)
+    
+    if (geo_level == "COUNTY") {
+      QS_BFR <- QS_BFR %>%
+        group_by(state) %>%
+        summarise(bfr = sum(bfr, na.rm = TRUE))
+    } else {
+      QS_BFR <- QS_BFR %>%
+        group_by(state) %>%
+        summarise(bfr = sum(bfr, na.rm = TRUE))
+    }
+    
+    QS_TOTAL_2022 <- getQuickstat(
+      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      program = "CENSUS",
+      sector = "DEMOGRAPHICS",
+      group = "PRODUCERS",
+      commodity = "PRODUCERS",
+      category = "PRODUCERS",
+      data_item = "PRODUCERS, (ALL) - NUMBER OF PRODUCERS",
+      geographic_level = "COUNTY",
+      year = "2022"
+    ) %>%
+      mutate(fips = paste0(state_fips_code, county_code)) %>%
+      rename(total_2022 = Value, state = state_fips_code) %>%
+      group_by(state) %>%
+      summarise(total_22 = sum(total_2022, na.rm = TRUE))
+    
+    
+      QS_TOTAL_2022 <- merge(QS_TOTAL_2022, QS_BFR, by = "state")
+      QS_TOTAL_2022$bfr_perc <- (QS_TOTAL_2022$bfr / QS_TOTAL_2022$total_22) * 100 
+      
+      
+      QS_BFR_name <- getQuickstat(
+        key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+        program = "CENSUS",
+        sector = "DEMOGRAPHICS",
+        group = "PRODUCERS",
+        commodity = "PRODUCERS",
+        category = "PRODUCERS",
+        data_item = "PRODUCERS, YEARS ON ANY OPERATION, LT 11 YEARS - NUMBER OF PRODUCERS",
+        geographic_level = "STATE",
+        year = "2022"
+      ) %>%
+        mutate(fips = paste0(state_fips_code, county_code)) %>%
+        rename(bfr = Value, state = fips) %>%
+        dplyr::select(state, state_name) 
+      
+      QS_TOTAL_2022 <- QS_TOTAL_2022 %>%
+        left_join(QS_BFR_name, by = "state") 
+      
+      
+      us_counties <- st_read("C:/Users/syedm/Desktop/BFR Spatial/Prelim/us_state.tar/us_state.shp") %>%
+        rename(state = GEOID) %>%
+        filter(!(STATEFP %in% c("78", "66", "72", "60", "69")))
+      
+      us_counties_df <- st_drop_geometry(us_counties)
+      merged_df <- left_join(us_counties_df, QS_TOTAL_2022, by = "state")
+      us_counties <- st_sf(merged_df, geometry = us_counties$geometry) 
+    
+    list(us_counties = us_counties, QS_TOTAL_2022 = QS_TOTAL_2022, QS_BFR = QS_BFR)
+  })
+  
+  output$map <- renderPlot({
+    us_counties <- data()$us_counties
+    
+    ggplot() +
+      geom_sf(data = us_counties, aes(fill = bfr_perc), color = "gray90", size = 0.05) +
+      scale_fill_gradient(low = "white", high = "blue", na.value = "grey50", name = "Percentage of Producers (%)") +
+      theme_minimal() +
+      labs(title = paste("Percentage of", gsub("PRODUCERS, ", "", gsub(" - NUMBER OF PRODUCERS", "", input$data_item)))) +
+      geom_sf_text(data = us_counties, aes(label = STUSPS), size = 3) +
+      coord_sf(crs = "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=37.5 +lon_0=-96") +
+      theme(
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid = element_blank()
+      ) +
+      theme(legend.position = "bottom") +
+      guides(fill = guide_colorbar(barwidth = 20, barheight = 1))
+  })
+  
+  output$table <- renderDataTable({
+    QS_TOTAL_2022 <- data()$QS_TOTAL_2022
+    datatable(QS_TOTAL_2022)
+  })
+  
+  output$bar_chart <- renderPlot({
+    QS_TOTAL_2022 <- data()$QS_TOTAL_2022
+    
+    overall_mean <- mean(QS_TOTAL_2022$bfr_perc, na.rm = TRUE)
+    specific_states <- c("ALABAMA", "ARKANSAS", "FLORIDA", "GEORGIA", "KENTUCKY", "LOUISIANA", 
+                         "MISSISSIPPI", "NORTH CAROLINA", "SOUTH CAROLINA", "TENNESSEE", 
+                         "VIRGINIA", "WEST VIRGINIA")
+    mean_specific_states <- mean(QS_TOTAL_2022$bfr_perc[QS_TOTAL_2022$state_name %in% specific_states], na.rm = TRUE)
+    not_listed_states <- QS_TOTAL_2022$state_name[!QS_TOTAL_2022$state_name %in% specific_states]
+    mean_not_listed_states <- mean(QS_TOTAL_2022$bfr_perc[QS_TOTAL_2022$state_name %in% not_listed_states], na.rm = TRUE)
+    
+    ggplot(QS_TOTAL_2022, aes(x = reorder(state_name, bfr_perc), y = bfr_perc)) +
+      geom_bar(stat = "identity", fill = "skyblue") +
+      labs(title = "Barplot of 'bfr_perc' by State with Means", x = "State", y = "Percentage of Producers (%)") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      geom_hline(yintercept = overall_mean, color = "red", linetype = "dashed", size = 1) +
+      annotate("text", x = "ALASKA", y = overall_mean, label = "US mean", hjust = -0.1, vjust = 0.5, color = "red") +
+      geom_hline(yintercept = mean_specific_states, color = "blue", linetype = "dashed", size = 1) +
+      geom_hline(yintercept = mean_not_listed_states, color = "black", linetype = "dashed", size = 1)
+  })
+}
+
+shinyApp(ui = ui, server = server) 
+
