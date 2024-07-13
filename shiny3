@@ -28,7 +28,7 @@ ui <- fluidPage(
   titlePanel("Percentage of Specific Types of Producers"),
   sidebarLayout(
     sidebarPanel(
-      #textInput("api_key", "Enter your USDA API key:", value = "4C0D7DCA-D6F6-30F7-84A2-757322710936"),
+      #textInput("api_key", "Enter your USDA API key:", value = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
       selectInput("data_item", "Select Data Item:", 
                   choices = list("Beginning Producers" = "PRODUCERS, YEARS ON ANY OPERATION, LT 11 YEARS - NUMBER OF PRODUCERS",
                                  "Female Producers (Day to Day Decisionmaking)" = "PRODUCERS, FEMALE, DAY TO DAY DECISIONMAKING - NUMBER OF PRODUCERS",
@@ -74,7 +74,7 @@ server <- function(input, output) {
     geographic_level <- ifelse(data_item == "PRODUCERS, FEMALE, DAY TO DAY DECISIONMAKING - NUMBER OF PRODUCERS", "STATE", "COUNTY")
     
     getQuickstat(
-      key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+      key = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
       program = "CENSUS",
       sector = "DEMOGRAPHICS",
       group = "PRODUCERS",
@@ -91,7 +91,7 @@ server <- function(input, output) {
   }
   
   data <- reactive({
-    api_key <- "4C0D7DCA-D6F6-30F7-84A2-757322710936"
+    api_key <- "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
     
     if (input$year == "% Change") {
       QS_BFR_2022 <- fetch_data("2022", input$data_item, api_key) %>%
@@ -107,7 +107,7 @@ server <- function(input, output) {
         rename(bfr = Value)
       
       QS_TOTAL <- getQuickstat(
-        key = "4C0D7DCA-D6F6-30F7-84A2-757322710936",
+        key = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
         program = "CENSUS",
         sector = "DEMOGRAPHICS",
         group = "PRODUCERS",
